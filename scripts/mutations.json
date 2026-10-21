@@ -1,0 +1,30 @@
+[
+  {
+    "name": "V1 signs ciphertext again",
+    "file": "src/ake/variants.ts",
+    "from": "name:'V1 \u00b7 do not sign c',omitC:true",
+    "to": "name:'V1 \u00b7 do not sign c',omitC:false",
+    "test": "variation 1 succeeds"
+  },
+  {
+    "name": "V3 signs responder identity",
+    "file": "src/ake/variants.ts",
+    "from": "name:'V3 \u00b7 do not sign idP',omitIdP:true",
+    "to": "name:'V3 \u00b7 do not sign idP',omitIdP:false",
+    "test": "variation 3 succeeds"
+  },
+  {
+    "name": "V4 keeps encrypted identity",
+    "file": "src/ake/variants.ts",
+    "from": "name:'V4 \u00b7 do not encrypt idQ',payload:'key'",
+    "to": "name:'V4 \u00b7 do not encrypt idQ',payload:'key-id'",
+    "test": "variation 4 succeeds"
+  },
+  {
+    "name": "V6 restores authenticated encryption",
+    "file": "src/ake/variants.ts",
+    "from": "name:'V6 \u00b7 replace authenticated encryption with CTR',payload:'key-id',ctr:true",
+    "to": "name:'V6 \u00b7 replace authenticated encryption with CTR',payload:'key-id',ctr:false",
+    "test": "variation 6 succeeds"
+  }
+]

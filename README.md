@@ -46,9 +46,10 @@ npm test
 npm run build
 npx playwright install chromium
 npm run test:a11y
+npm run test:mutations
 ```
 
-13 unit tests cover the six live variations and their restored failures, honest binding, primitive known answers, and AKE2eg/AKE4eg/AKE5 exchanges. No published AKE1–AKE5 end-to-end test vectors exist. The Playwright suite scans reachable desktop and mobile states for WCAG 2.1 A/AA issues and independently rederives displayed claims. GitHub Actions runs unit tests, production build and browser gate before deploying; it also gates Dependabot pull requests, groups minor/patch npm updates and dispatches a deploy after an automated merge.
+13 unit tests cover the six live variations and their restored failures, honest binding, primitive known answers, and AKE2eg/AKE4eg/AKE5 exchanges. No published AKE1–AKE5 end-to-end test vectors exist. The replayable mutation harness contains 4 concrete source patches. Each run first passes its named baseline test, requires a non-empty diff, a successful build and changed JavaScript bundle hash, then requires the owning test to fail and restores the original hash. The Playwright suite scans reachable desktop and mobile states for WCAG 2.1 A/AA issues and independently rederives displayed claims. GitHub Actions runs unit tests, production build and browser gate before deploying; it also gates Dependabot pull requests, groups minor/patch npm updates and dispatches a deploy after an automated merge.
 
 ## Performance
 
