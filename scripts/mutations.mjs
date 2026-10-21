@@ -1,50 +1,15 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import crypto from 'node:crypto';
-import {spawnSync} from 'node:child_process';
-
-const root=process.cwd();
-const cases=JSON.parse(fs.readFileSync(path.join(root,'scripts/mutations.json'),'utf8'));
-function run(bin,args){
- const result=spawnSync(bin,args,{cwd:root,encoding:'utf8',env:{...process.env,CI:'1'},timeout:180000});
- return {code:result.status,output:(result.stdout||'')+'\n'+(result.stderr||'')};
+import {readFileSync,writeFileSync,readdirSync,existsSync,rmSync} from 'node:fs';import {createHash} from 'node:crypto';import {spawnSync} from 'node:child_process';
+import {assertNormalExit,validateNamedRun} from './mutation-report.mjs';
+const specs=JSON.parse(readFileSync(new URL('./mutations.json',import.meta.url),'utf8'));
+function command(args){if((args[0]==='npm'&&args[1]==='run'&&args[2]==='build')||(args[0]==='npx'&&args[1]==='playwright'))rmSync('dist',{recursive:true,force:true});const p=spawnSync(args[0],args.slice(1),{encoding:'utf8',env:{...process.env,CI:'1'},timeout:300000,maxBuffer:5e6});assertNormalExit(p,args[0]);return {...p,ok:p.status===0,text:(p.stdout||'')+(p.stderr||'')};}
+// Hash only this build's emitted scripts. Old, unreferenced browser artifacts
+// must not enter the restoration comparison; the Vite manifest is regenerated.
+function hash(){const manifest=JSON.parse(readFileSync('dist/.vite/manifest.json','utf8'));const files=[...new Set(Object.values(manifest).flatMap(entry=>[entry.file,...(entry.assets??[])]).filter(file=>file.endsWith('.js')))].sort();if(!files.length)throw Error('No JavaScript in build manifest');const h=createHash('sha256');for(const file of files){h.update(file);h.update(readFileSync('dist/'+file));}return h.digest('hex');}
+const dirty=command(['git','status','--porcelain']);if(!dirty.ok||dirty.text.trim())throw Error('Commit source changes before mutations');
+const reports=[];
+for(const m of specs){const original=readFileSync(m.file,'utf8');if(original.split(m.anchor).length!==2)throw Error('Mutation anchor is not unique: '+m.name);const args=['npx','playwright','test','e2e/claims.spec.ts','--retries=0','-g',m.test,'--reporter=json'];const built=command(['npm','run','build','--','--manifest']);if(!built.ok)throw Error('Baseline build failed: '+built.text);const before=hash();const baseline=command(args);validateNamedRun(baseline,m.test,true);let result;
+ try{const patched=original.replace(m.anchor,m.replacement);if(patched===original)throw Error('Empty mutation');writeFileSync(m.file,patched);const build=command(['npm','run','build','--','--manifest']);if(!build.ok)throw Error('DOES NOT BUILD: '+m.name+'\n'+build.text);if(hash()===before)throw Error('Bundle did not move: '+m.name);result=command(args);validateNamedRun(result,m.test,false);reports.push({name:m.name,test:m.test,baseline:'passed',sourceChanged:true,bundleMoved:true,killed:true});console.log('KILLED: '+m.name+' -> '+m.test);
+ }finally{writeFileSync(m.file,original);const restored=command(['npm','run','build','--','--manifest']);if(!restored.ok||hash()!==before)throw Error('Restore failed: '+m.name+'; expected '+before+'; observed '+hash()+'; build exit '+restored.status+'\n'+restored.text);}
+ const after=command(args);validateNamedRun(after,m.test,true);
 }
-function build(){
- const r=run('npm',['run','build']);
- if(r.code!==0)throw Error('DOES NOT BUILD:\n'+r.output.slice(-1800));
- const files=fs.readdirSync(path.join(root,'dist/assets')).filter(f=>f.endsWith('.js')).sort();
- const digest=crypto.createHash('sha256');
- for(const file of files){digest.update(file);digest.update(fs.readFileSync(path.join(root,'dist/assets',file)))}
- return digest.digest('hex');
-}
-function command(c){return c.browser?['npx',['playwright','test','e2e/claims.spec.ts','--grep',c.test,'--workers=1']]:['npm',['test','--','-t',c.test]]}
-let passed=0;
-for(const c of cases){
- const file=path.join(root,c.file),original=fs.readFileSync(file,'utf8');
- if(original.split(c.from).length!==2)throw Error(c.name+': source anchor is not unique');
- const [bin,args]=command(c);
- const baseline=run(bin,args);
- if(baseline.code!==0)throw Error(c.name+': baseline did not pass:\n'+baseline.output.slice(-1800));
- const oldHash=build();
- let failure;
- try{
-  fs.writeFileSync(file,original.replace(c.from,c.to));
-  const diff=run('git',['diff','--',c.file]);
-  if(!diff.output.includes('+')||!diff.output.includes('-'))throw Error('EMPTY DIFF');
-  const newHash=build();
-  if(newHash===oldHash)throw Error('BUNDLE HASH DID NOT MOVE');
-  const mutated=run(bin,args);
-  if(mutated.code===0)throw Error('SURVIVED: the named test stayed green');
-  if(/DOES NOT BUILD|webServer was not able to start|ERR_CONNECTION_REFUSED/.test(mutated.output))throw Error('INFRASTRUCTURE FAILURE, NOT A KILL');
-  if(!mutated.output.includes(c.test))throw Error('WRONG TEST FAILED:\n'+mutated.output.slice(-1400));
-  console.log('KILLED '+c.name+' by '+c.test+' ('+oldHash.slice(0,8)+' → '+newHash.slice(0,8)+')');
-  passed++;
- }catch(error){failure=error}
- finally{
-  fs.writeFileSync(file,original);
-  const restoredHash=build();
-  if(restoredHash!==oldHash)throw Error(c.name+': restored bundle hash differs');
- }
- if(failure)throw Error(c.name+': '+failure.message);
-}
-console.log(passed+'/'+cases.length+' concrete source mutations killed; each baseline passed, diff was non-empty, build succeeded, bundle moved and restored.');
+if(!existsSync('dist'))throw Error('Missing build');writeFileSync('mutation-results.json',JSON.stringify(reports,null,2)+'\n');console.log(reports.length+' / '+specs.length+' mutations killed and restored');

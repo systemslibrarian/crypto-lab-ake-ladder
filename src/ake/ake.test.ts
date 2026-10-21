@@ -3,7 +3,7 @@ import {ristretto255,ed25519} from '@noble/curves/ed25519.js';
 import {base,decode} from '../group/ristretto';
 import {kdf,open,seal} from '../crypto';
 import {honest} from './ake1';
-import {runVariation} from '../attack/variations';
+import {runVariation} from './experiment';
 import {ake2,ake4,ake5} from './advanced';
 
 describe('published primitive behavior',()=>{
@@ -42,7 +42,7 @@ describe('AKE1 fields and actual scripted attacks',()=>{
  });
 });
 describe('AKE2eg, AKE4eg, AKE5',()=>{
- it('ephemeral DH agrees; a later signing-key leak does not decrypt the record',async()=>{const r=await ake2();expect(r.p).toBe(r.q);await expect(open(new Uint8Array(32),r.record)).rejects.toThrow(/decryption failed/)});
+ it('ephemeral DH agrees; a later signing-key leak does not decrypt the record',async()=>{const r=await ake2();expect(r.p).toBe(r.q);expect(r.ephemeralErased).toBe(true);expect(r.leak.probes).toHaveLength(3);expect(r.leak.probes[0].candidate).toBe(r.leak.leakedSigningKey);expect(r.leak.opened).toBe(false)});
  it('identity-protected AKE4 checks Q before sending c2',async()=>{
   const good=await ake4(),fake=await ake4(true);
   expect(good.partner).toBe('Q');expect(good.c2).toBeDefined();

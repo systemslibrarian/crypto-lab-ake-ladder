@@ -1,8 +1,11 @@
 import {tuple} from './encode';
 export const randomBytes=(n:number)=>crypto.getRandomValues(new Uint8Array(n));
 export async function kdf(domain:string,input:Uint8Array,length=32):Promise<Uint8Array>{
+ return hkdf(input,new Uint8Array(32),tuple(domain),length);
+}
+export async function hkdf(input:Uint8Array,salt:Uint8Array,info:Uint8Array,length:number){
  const material=await crypto.subtle.importKey('raw',new Uint8Array(input),'HKDF',false,['deriveBits']);
- return new Uint8Array(await crypto.subtle.deriveBits({name:'HKDF',hash:'SHA-256',salt:new Uint8Array(32),info:new Uint8Array(tuple(domain))},material,length*8));
+ return new Uint8Array(await crypto.subtle.deriveBits({name:'HKDF',hash:'SHA-256',salt:new Uint8Array(salt),info:new Uint8Array(info)},material,length*8));
 }
 export type Sealed={iv:Uint8Array;data:Uint8Array};
 export async function seal(key:Uint8Array,plain:Uint8Array):Promise<Sealed>{

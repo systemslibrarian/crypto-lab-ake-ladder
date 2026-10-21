@@ -49,7 +49,7 @@ npm run test:a11y
 npm run test:mutations
 ```
 
-13 unit tests cover the six live variations and their restored failures, honest binding, primitive known answers, and AKE2eg/AKE4eg/AKE5 exchanges. No published AKE1–AKE5 end-to-end test vectors exist. The replayable mutation harness contains 4 concrete source patches. Each run first passes its named baseline test, requires a non-empty diff, a successful build and changed JavaScript bundle hash, then requires the owning test to fail and restores the original hash. The Playwright suite scans reachable desktop and mobile states for WCAG 2.1 A/AA issues and independently rederives displayed claims. GitHub Actions runs unit tests, production build and browser gate before deploying; it also gates Dependabot pull requests, groups minor/patch npm updates and dispatches a deploy after an automated merge.
+73 executed unit cases cover the six live variations and their restored failures, honest binding, primitive known answers, and AKE2eg/AKE4eg/AKE5 exchanges. No published AKE1–AKE5 end-to-end test vectors exist. The replayable mutation harness contains 17 concrete source patches (13 verdict paths and the original four definition regressions). Each run first passes its named baseline test, requires a non-empty diff, a successful build and changed JavaScript bundle hash, then requires the owning test to fail and restores the original hash. The Playwright suite contains 15 claims tests and two accessibility state drives (1280px and 320px). It scans reachable desktop and mobile states for WCAG 2.1 A/AA issues and independently rederives displayed claims. GitHub Actions runs unit tests, production build and browser gate before deploying; it also gates Dependabot pull requests, groups minor/patch npm updates and dispatches a deploy after an automated merge.
 
 ## Performance
 
@@ -67,3 +67,21 @@ All runs are local to the browser. Work figures shown in the page are either act
 *One of the browser demos in the [Crypto Lab](https://crypto-lab.systemslibrarian.dev/) suite.*
 
 *"So whether you eat or drink or whatever you do, do it all for the glory of God." — 1 Corinthians 10:31*
+
+## Deviations from the brief
+
+- The mutation runner uses structured Playwright reports, rejects timeouts, browser/setup failures and retries, requires the exact owning assertion, and reruns the restored test. Retaining the former text-search runner would incorrectly count infrastructure failures as kills. This intentional exception to the runner freeze matches Hash Hunt's hardened runner.
+- The brief leaves its McGrew–Viega GCM case explicitly UNVERIFIED. The pinned multi-block substitute is NIST's [AES-GCM examples](https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/AES_GCM.pdf), GCM-AES256 Example 2 (512-bit plaintext, no AAD, 128-bit tag). The actual AES-GCM wrapper is tested with the published IV through a test-only RNG mock.
+- A finite set of leaked-signing-key decryption probes cannot prove forward secrecy. The page says exactly what was tried; DH security and erasure supply the cryptographic argument (Boneh–Shoup §21.3). The adversary receives the actual disclosed key and public recording. A negative-control unit test deliberately encrypts under that key and confirms the probe catches the exposure.
+
+## Audit repair evidence
+
+Protocol runs are coordinated in `src/ake/`; individual `src/attack/` modules receive public wire copies, corrupt-user signing capability or an explicitly leaked key. They cannot import honest state. Honest P creates the V1 application record; honest Q supplies V3's partner and binding. The ephemeral-alpha experiment replays a signed u to a fresh honest Q, derives the adversary's key, sends an application record, and checks Q's actual acceptance. The AKE4 forgery replays an authentic earlier signature on fresh DH values, with a successful verification of the original as its positive control.
+
+Expandable educator inspectors include session keys and full bytes for verification; those inspector values are not inputs to the adversary. Browser tests independently encode tuples and use Node crypto for hashes, HKDF, AES-GCM and Ed25519; their AKE5 reference reimplements the equations over the public ristretto primitive. AKE1 post-leak decryption is independently recomputed from the disclosed scalar.
+
+`src/kat/vectors.json` was extracted from primary texts, not recalled values: RFC 9496 A.1 (16) and A.2 (29); RFC 8032 §7.1 TEST 1, TEST 2, TEST 1024; RFC 5869 A.1/A.2; NIST SP 800-38A F.5.1's four blocks; NIST AES-GCM AES256 Example 2. The file records SHA-256 digests of the downloaded source files. URLs: [RFC 9496](https://www.rfc-editor.org/rfc/rfc9496.txt), [RFC 8032](https://www.rfc-editor.org/rfc/rfc8032.txt), [RFC 5869](https://www.rfc-editor.org/rfc/rfc5869.txt), [SP 800-38A](https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38a.pdf).
+
+Counts: `npx vitest list --json` enumerates declarations in this Vitest version; `npm test` expands parameter rows to 73 cases. `npx playwright test --list` lists 17 browser tests. `scripts/mutations.json` has 17 entries. No tests are skipped.
+
+Mutation restoration hashes the JavaScript files listed by each fresh Vite build manifest. Unreferenced files left by browser artifact collection are excluded; baseline, mutant and restored builds still have to satisfy every assertion and hash check.

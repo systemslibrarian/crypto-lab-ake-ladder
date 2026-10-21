@@ -1,27 +1,19 @@
-import AxeBuilder from '@axe-core/playwright';
-import {expect,test,type Page} from '@playwright/test';
-
-const WCAG=['wcag2a','wcag2aa','wcag21a','wcag21aa'];
-async function scan(page:Page){
-  await expect(page.locator('main#app h1')).toHaveCount(1);
-  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth+1);
-  expect(overflow,'WCAG 1.4.10: no horizontal scroll at viewport width').toBe(false);
-  const result=await new AxeBuilder({page}).withTags(WCAG).analyze();
-  expect(result.violations.map(v=>`${v.id}: ${v.nodes.map(n=>n.target.join(',')).join('; ')}`)).toEqual([]);
-  expect(result.incomplete.filter(v=>WCAG.some(t=>v.tags.includes(t))).map(v=>v.id),'axe must decide WCAG checks, not leave inconclusive contrast').toEqual([]);
-  const best=await new AxeBuilder({page}).withRules(['region','landmark-one-main']).analyze();
-  expect(best.violations.map(v=>v.id)).toEqual([]);
-  const rgb=await page.evaluate(()=>{const h=getComputedStyle(document.documentElement),b=getComputedStyle(document.body);return [h.backgroundColor,b.color]});
-  expect(rgb[0]).not.toBe('rgba(0, 0, 0, 0)');
-}
-for(const width of [1280,380])test(`production page: reachable states pass WCAG A/AA at ${width}px`,async({page})=>{
-  test.setTimeout(120000);
-  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.setViewportSize({width,height:850});
-  await page.emulateMedia({reducedMotion:'reduce'});
-  await page.goto('./');await expect(page.locator('#exhibit section').first()).toBeVisible();
-  expect(await page.evaluate(()=>matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
-  await scan(page);
-  await page.locator('#rung').selectOption('3');await page.getByRole('button',{name:'Run the attack'}).click();await expect(page.locator('#ladder-out')).toContainText('MISBINDING');await scan(page);await page.getByRole('button',{name:'Restore the field'}).click();await expect(page.locator('#ladder-out')).toContainText('RESTORED FIELD');await scan(page);
-  expect(errors).toEqual([]);
+import {expect,test} from '@playwright/test';
+import {boot,scan,watchPageErrors,expectBaselineNotStale,reportCollected} from './gate';
+// Adapted from the Schnorr reference: reachable AKE states at desktop and 320px.
+for(const width of [1280,320])test(`WCAG reachable AKE states at ${width}px`,async({page})=>{
+ test.setTimeout(900000);await page.setViewportSize({width,height:900});const errors=watchPageErrors(page);await boot(page,'dark');await scan(page,'arrival');
+ await page.locator('#honest-run').click();await expect(page.locator('#honest-out-evidence')).toBeAttached();await scan(page,'honest result');
+ await page.locator('#honest-out-evidence summary').click();await scan(page,'complete wire inspector open');
+ for(let id=1;id<=6;id++){
+  await page.locator('#rung').selectOption(String(id));await page.locator('#variant-honest').click();await expect(page.locator('#ladder-out')).toHaveClass('good');await scan(page,`V${id} honest`);
+  await page.locator('#attack-run').click();await expect(page.locator('#ladder-out-evidence')).toBeAttached();await scan(page,`V${id} attack`);
+  await page.locator('#ladder-out-evidence summary').click();await scan(page,`V${id} evidence`);
+  await page.locator('#restore-run').click();await expect(page.locator('#ladder-out')).toHaveClass('good');await scan(page,`V${id} restored`);
+ }
+ for(const [button,output] of [['pfs-run','pfs-out'],['ephemeral-run','pfs-out'],['observe-run','identity-out'],['probe-run','identity-out'],['deniable-run','deniable-out']]){
+  await page.locator('#'+button).click();await expect(page.locator('#'+output+'-evidence')).toBeAttached();await scan(page,button+' result');await page.locator('#'+output+'-evidence summary').click();await scan(page,button+' evidence');
+ }
+ await page.locator('section[aria-labelledby=limits] summary').click();await scan(page,'sources open');await page.locator('.cl-skip-link').focus();await scan(page,'focused skip link');
+ expect(errors,errors.join('\n')).toEqual([]);expectBaselineNotStale();reportCollected();
 });

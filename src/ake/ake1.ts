@@ -1,11 +1,12 @@
 import {base,scalar} from '../group/ristretto';
 import {keypair,sign,verify} from '../sig/ed25519';
 import {ToyCA,type Cert} from '../ca/ca';
-import {bytes,concat,equal,hex,tuple} from '../encode';
+import {bytes,concat,equal,tuple} from '../encode';
 import {randomBytes,fingerprint} from '../crypto';
 import {encrypt,decrypt,encodeCipher,type Cipher} from '../pke/eeg';
 import {encryptCtr,decryptCtr} from '../pke/eeg-ctr';
 import {HONEST,type Definition} from './variants';
+import {binding} from './binding';
 
 export type Party={id:string;encSecret:bigint;signSecret:Uint8Array;cert:Cert};
 export type Context={ca:ToyCA;p:Party;q:Party;r:Party};
@@ -38,11 +39,19 @@ export async function finish(def:Definition,start:Start,response:Response,p:Part
  const key=plain.slice(0,32),bound=plain.slice(32);
  if(def.payload==='key-id'&&!equal(bound,bytes(response.cert.id)))throw new Error(`decrypted identity ${String.fromCharCode(...bound)} ≠ certificate identity ${response.cert.id}`);
  if(def.payload==='key-r'&&!equal(bound,start.r))throw new Error('decrypted nonce ≠ current r');
- const binding=hex(tuple('AKE1/channel-binding',bytes(p.id),bytes(response.cert.id),start.r,encodeCipher(response.cipher)));
- return {partner:response.cert.id,key,fingerprint:await fingerprint(key),binding};
+ const channelBinding=binding(p.id,response.cert.id,start.r,response.cipher);
+ return {partner:response.cert.id,key,fingerprint:await fingerprint(key),binding:channelBinding};
 }
 export async function honest():Promise<{p:View;q:View;ctx:Context;start:Start;response:Response}>{
  const ctx=setup(),start=first(ctx.p),response=await respond(HONEST,start,ctx.q,ctx.ca),p=await finish(HONEST,start,response,ctx.p,ctx.ca);
- const q:View={partner:response.peer,key:response.key,fingerprint:await fingerprint(response.key),binding:hex(tuple('AKE1/channel-binding',bytes(start.cert.id),bytes(ctx.q.id),start.r,encodeCipher(response.cipher)))};
+ const q:View={partner:response.peer,key:response.key,fingerprint:await fingerprint(response.key),binding:binding(start.cert.id,ctx.q.id,start.r,response.cipher)};
  return {p,q,ctx,start,response};
+}
+
+/** Secret state stays here; the network receives a copy containing wire fields only. */
+export function wire(response:Response):Pick<Response,'cipher'|'signature'|'cert'> {
+ return structuredClone({cipher:response.cipher,signature:response.signature,cert:response.cert});
+}
+export async function responderView(start:Start,response:Response,q:Party):Promise<View> {
+ return {partner:response.peer,key:response.key,fingerprint:await fingerprint(response.key),binding:binding(start.cert.id,q.id,start.r,response.cipher)};
 }

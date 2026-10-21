@@ -2,29 +2,120 @@
   {
     "name": "V1 signs ciphertext again",
     "file": "src/ake/variants.ts",
-    "from": "name:'V1 \u00b7 do not sign c',omitC:true",
-    "to": "name:'V1 \u00b7 do not sign c',omitC:false",
-    "test": "variation 1 succeeds"
+    "anchor": "name:'V1 \u00b7 do not sign c',omitC:true",
+    "replacement": "name:'V1 \u00b7 do not sign c',omitC:false",
+    "test": "V1 attack has independently checked evidence"
   },
   {
-    "name": "V3 signs responder identity",
+    "name": "V3 signs initiator identity",
     "file": "src/ake/variants.ts",
-    "from": "name:'V3 \u00b7 do not sign idP',omitIdP:true",
-    "to": "name:'V3 \u00b7 do not sign idP',omitIdP:false",
-    "test": "variation 3 succeeds"
+    "anchor": "name:'V3 \u00b7 do not sign idP',omitIdP:true",
+    "replacement": "name:'V3 \u00b7 do not sign idP',omitIdP:false",
+    "test": "V3 attack has independently checked evidence"
   },
   {
     "name": "V4 keeps encrypted identity",
     "file": "src/ake/variants.ts",
-    "from": "name:'V4 \u00b7 do not encrypt idQ',payload:'key'",
-    "to": "name:'V4 \u00b7 do not encrypt idQ',payload:'key-id'",
-    "test": "variation 4 succeeds"
+    "anchor": "name:'V4 \u00b7 do not encrypt idQ',payload:'key'",
+    "replacement": "name:'V4 \u00b7 do not encrypt idQ',payload:'key-id'",
+    "test": "V4 attack has independently checked evidence"
   },
   {
     "name": "V6 restores authenticated encryption",
     "file": "src/ake/variants.ts",
-    "from": "name:'V6 \u00b7 replace authenticated encryption with CTR',payload:'key-id',ctr:true",
-    "to": "name:'V6 \u00b7 replace authenticated encryption with CTR',payload:'key-id',ctr:false",
-    "test": "variation 6 succeeds"
+    "anchor": "name:'V6 \u00b7 replace authenticated encryption with CTR',payload:'key-id',ctr:true",
+    "replacement": "name:'V6 \u00b7 replace authenticated encryption with CTR',payload:'key-id',ctr:false",
+    "test": "V6 attack has independently checked evidence"
+  },
+  {
+    "name": "V1 network edit no longer creates its claimed attack",
+    "file": "src/attack/v1.ts",
+    "anchor": "bytes('Q')",
+    "replacement": "bytes('R')",
+    "test": "V1 attack has independently checked evidence"
+  },
+  {
+    "name": "V2 network edit no longer creates its claimed attack",
+    "file": "src/attack/v2.ts",
+    "anchor": "start:w.freshStart",
+    "replacement": "start:w.start",
+    "test": "V2 attack has independently checked evidence"
+  },
+  {
+    "name": "V3 network edit no longer creates its claimed attack",
+    "file": "src/attack/v3.ts",
+    "anchor": "cert.id==='R'",
+    "replacement": "cert.id==='P'",
+    "test": "V3 attack has independently checked evidence"
+  },
+  {
+    "name": "V4 network edit no longer creates its claimed attack",
+    "file": "src/attack/v4.ts",
+    "anchor": "const start=w.freshStart",
+    "replacement": "const start=w.start",
+    "test": "V4 attack has independently checked evidence"
+  },
+  {
+    "name": "V5 resigns with the honest certificate",
+    "file": "src/attack/v5.ts",
+    "anchor": "resign(w,start,w.reply)",
+    "replacement": "resign({...w,corruptCert:w.reply.cert},start,w.reply)",
+    "test": "V5 attack has independently checked evidence"
+  },
+  {
+    "name": "V6 network edit no longer creates its claimed attack",
+    "file": "src/attack/v6.ts",
+    "anchor": "bytes('Q')[0]^bytes('R')[0]",
+    "replacement": "bytes('Q')[0]^bytes('Q')[0]",
+    "test": "V6 attack has independently checked evidence"
+  },
+  {
+    "name": "honest binding loses initiator identity",
+    "file": "src/ake/binding.ts",
+    "anchor": "bytes(p)",
+    "replacement": "bytes('R'+p)",
+    "test": "honest binding and fingerprints derive from complete wire bytes"
+  },
+  {
+    "name": "AKE1 leak takes the wrong key bytes",
+    "file": "src/ui/acts.ts",
+    "anchor": "recovered=leaked.slice(0,32)",
+    "replacement": "recovered=leaked.slice(1,33)",
+    "test": "AKE1 leaked scalar independently decrypts prior application record"
+  },
+  {
+    "name": "AKE2 accepts the leaked signing secret as its session key",
+    "file": "src/ake/ake2eg.ts",
+    "anchor": "const record=await seal(key,bytes('private prior session'));",
+    "replacement": "key.set(ctx.p.signSecret);q.key.set(ctx.p.signSecret);const record=await seal(key,bytes('private prior session'));",
+    "test": "AKE2 signing-key disclosure runs real rejected decryption probes"
+  },
+  {
+    "name": "ephemeral leak uses the wrong exponent",
+    "file": "src/attack/ephemeral.ts",
+    "anchor": "shared(v,alpha)",
+    "replacement": "shared(v,alpha+1n)",
+    "test": "ephemeral leak leads honest Q to accept a fresh adversary record"
+  },
+  {
+    "name": "fake responder elicits P certificate before verification",
+    "file": "src/ake/ake4eg.ts",
+    "anchor": "return {u,v,c1,reason:'Fake responder",
+    "replacement": "return {u,v,c1,c2:await seal(k2,certWire(ctx.p.cert)),reason:'Fake responder",
+    "test": "active fake responder is rejected before c2 is sent"
+  },
+  {
+    "name": "AKE4 forgery judge verifies old transcript instead",
+    "file": "src/ake/fabrication.ts",
+    "anchor": "forgedValid:replaySignature(recorded.publicP,recorded.signatureP,newU,newV)",
+    "replacement": "forgedValid:replaySignature(recorded.publicP,recorded.signatureP,recorded.u,recorded.v)",
+    "test": "AKE4 fabrication rejects a valid signature replayed onto fresh DH values"
+  },
+  {
+    "name": "AKE5 fabricated confirmation is corrupted",
+    "file": "src/ake/ake5.ts",
+    "anchor": "const fabricated=await evidence(ctx.p.cert.enc,ctx.q.cert.enc,ctx.q.encSecret,scalar(),scalar());",
+    "replacement": "const fabricated=await evidence(ctx.p.cert.enc,ctx.q.cert.enc,ctx.q.encSecret,scalar(),scalar());fabricated.k1[0]^=1;",
+    "test": "AKE5 real and Q fabricated confirmations independently recompute"
   }
 ]
