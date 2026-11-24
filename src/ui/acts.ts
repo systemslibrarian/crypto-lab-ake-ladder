@@ -8,7 +8,7 @@ import {bytes,hex} from '../encode';
 
 import {fabrication4} from '../ake/fabrication';
 import {inspect,wireEvidence} from '../ake/experiment';
-import {inspectEvidence} from '../ui/evidence';
+import {inspectEvidence,sessionAgrees} from '../ui/evidence';
 const root=document.querySelector<HTMLElement>('#exhibit')!;
 root.innerHTML=`
 <section aria-labelledby="intro"><h2 id="intro">Get the key right. Get the names right.</h2><p>Two computers want a shared secret key and need to know who is on the other end. A protocol that agrees on a key but gets the names wrong is broken; so is one that revives an old key. Build AKE1 with real ristretto255, Ed25519, HKDF, and AES-GCM, then remove a field and run the resulting attack.</p><p class="warn card"><strong>Model:</strong> Genuine primitives, in-memory keys and a toy CA. Network ordering and the adversary are scripted in-page. No real networking, X.509 or formal security proof. Not production crypto — a teaching demo.</p></section>
@@ -27,7 +27,7 @@ function select(){const current=Number((el('rung') as HTMLSelectElement).value);
  report('ladder-out',def?'Retired: rung changed. Run the honest flow or its attack.':'Select V1–V6 to explore a removed field.');
 }
 el('rung').addEventListener('change',select);
-el('honest-run').addEventListener('click',async()=>{const id=++serial;report('honest-out','Generating keys and checking the CA signature…');try{const {p,q,start,response}=await honest();if(id!==serial)return;report('honest-out',`1. P → Q: fresh r = ${hex(start.r).slice(0,32)}…; CertP checked.\n2. Q → P: c has canonical ristretto255 v (${response.cipher.v.length} bytes), a 12-byte AES-GCM IV, encrypted (k,idQ) and a tag. Q signed (r,c,idP).\n3. P checked CertQ and Ed25519, decrypted and compared idQ.\nP: key ${p.fingerprint}, partner ${p.partner}, binding ${shortened(p.binding)}\nQ: key ${q.fingerprint}, partner ${q.partner}, binding ${shortened(q.binding)}\n${p.fingerprint===q.fingerprint&&p.binding===q.binding?'AGREED — same key and channel binding.':'STOP — participants differ.'}`,'good');inspectEvidence('honest-out',{p:inspect(p),q:inspect(q),pWire:wireEvidence('P','Q',start,response),qWire:wireEvidence('P','Q',start,response)})}catch(e){report('honest-out',`Abort: ${String(e)}`,'warn')}});
+el('honest-run').addEventListener('click',async()=>{const id=++serial;report('honest-out','Generating keys and checking the CA signature…');try{const {p,q,start,response}=await honest();if(id!==serial)return;const agreed=sessionAgrees(p,q);report('honest-out',`1. P → Q: fresh r = ${hex(start.r).slice(0,32)}…; CertP checked.\n2. Q → P: c has canonical ristretto255 v (${response.cipher.v.length} bytes), a 12-byte AES-GCM IV, encrypted (k,idQ) and a tag. Q signed (r,c,idP).\n3. P checked CertQ and Ed25519, decrypted and compared idQ.\nP: key fingerprint ${p.fingerprint}, partner ${p.partner}, binding ${shortened(p.binding)}\nQ: key fingerprint ${q.fingerprint}, partner ${q.partner}, binding ${shortened(q.binding)}\n${agreed?'AGREED — same key and channel binding.':'STOP — participants differ.'}`,agreed?'good':'alarm');inspectEvidence('honest-out',{p:inspect(p),q:inspect(q),pWire:wireEvidence('P','Q',start,response),qWire:wireEvidence('P','Q',start,response)})}catch(e){report('honest-out',`Abort: ${String(e)}`,'warn')}});
 el('variant-honest').addEventListener('click',async()=>{
  const def=VARIANTS.find(v=>v.id===Number((el('rung') as HTMLSelectElement).value));if(!def){report('ladder-out','Select V1–V6 first.');return}
  const id=++serial;report('ladder-out','Running this definition with honest parties…');
@@ -39,7 +39,7 @@ el('attack-run').addEventListener('click',async()=>{
  const id=++serial;report('ladder-out','Running the scripted adversary against real primitives…');
  try{const outcome=await runVariation(n);if(id!==serial)return;
   const keyMatch=outcome.p?.fingerprint===outcome.q.fingerprint,bindingMatch=outcome.p?.binding===outcome.q.binding;
-  report('ladder-out',`ALARM — ${outcome.class==='key exposure'?'KEY EXPOSED':outcome.class==='replay'?'REPLAYED KEY':'MISBOUND'}\n${outcome.effect}\nP sees ${outcome.p?.partner}, key ${outcome.p?.fingerprint}; Q sees ${outcome.q.partner}, key ${outcome.q.fingerprint}.\n${keyMatch?'SAME KEY':'DIFFERENT KEYS'} — ${bindingMatch?'SAME':'DIFFERENT'} BINDING.\nAdversary: ${outcome.attacker}.${outcome.cipher?`\nCipher byte XOR: 0x${(outcome.cipher.before[0]^outcome.cipher.after[0]).toString(16)} = Q XOR R.`:''}\nSelect Restore the field to see the actual rejection.`,'alarm');inspectEvidence('ladder-out',outcome.evidence)}
+  report('ladder-out',`ALARM — ${outcome.class==='key exposure'?'KEY EXPOSED':outcome.class==='replay'?'REPLAYED KEY':'MISBOUND'}\n${outcome.effect}\nP sees ${outcome.p?.partner}, key ${outcome.p?.fingerprint}; Q sees ${outcome.q.partner}, key ${outcome.q.fingerprint}.\n${keyMatch?'MATCHING KEY FINGERPRINTS':'DIFFERENT KEY FINGERPRINTS'} — ${bindingMatch?'SAME':'DIFFERENT'} BINDING.\nAdversary: ${outcome.attacker}.${outcome.cipher?`\nCipher byte XOR: 0x${(outcome.cipher.before[0]^outcome.cipher.after[0]).toString(16)} = Q XOR R.`:''}\nSelect Restore the field to see the actual rejection.`,'alarm');inspectEvidence('ladder-out',outcome.evidence)}
  catch(e){report('ladder-out',`Attack failed to complete: ${String(e)}`,'warn')}
 });
 el('restore-run').addEventListener('click',async()=>{

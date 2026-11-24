@@ -1,4 +1,10 @@
-import {hex} from '../encode';
+import {equal,hex} from '../encode';
+import type {View} from '../ake/ake1';
+
+export function sessionAgrees(p: View, q: View): boolean {
+  return equal(p.key, q.key) && p.binding === q.binding;
+}
+
 export function inspectEvidence(id:string,evidence:unknown){
  const host=document.getElementById(id)!;document.getElementById(id+'-evidence')?.remove();
  const details=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');
